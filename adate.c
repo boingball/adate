@@ -30,6 +30,7 @@ struct Options {
 };
 
 BOOL parse_arguments(LONG *args, struct Options *opts);
+void free_arguments(struct Options *opts);
 BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int *hours, int *minutes, struct TimeVal *tv);
 int calculate_days_since_1978(int year, int month, int day);
 void calculate_year_month_day(int days, int *year, int *month, int *day);
@@ -195,7 +196,8 @@ int main() {
     if (timerReq) DeleteIORequest((struct IORequest *)timerReq);
     if (timerPort) DeleteMsgPort(timerPort);
     show_date(&tv, opts.format ? opts.format : "%Y-%m-%d %H:%M:%S");
-
+	free_arguments(&opts);
+	
     return RETURN_OK;
 }
 
@@ -210,6 +212,14 @@ BOOL parse_arguments(LONG *args, struct Options *opts) {
     return TRUE;
 }
 
+void free_arguments(struct Options *opts) {
+    if (opts) {
+		if (opts->format) free(opts->format);
+		if (opts->datestr) free(opts->datestr);
+		if (opts->timestr) free(opts->timestr);
+		if (opts->epoch) free(opts->epoch);
+	}
+}
 
 BOOL adjust_date_time(struct TimeVal *tv, const struct Options *opts) {
     struct MsgPort *timerPort = CreateMsgPort();
