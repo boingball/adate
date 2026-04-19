@@ -48,6 +48,7 @@ int calculate_week_number(int year, int month, int day, int week_start);
 /* Calculate the week number of the year.*/
 int month_name_to_number(const char *month_name);
 /* Convert a three-letter month name to its corresponding month number.*/
+void strip_leading_plus(char *format);
 
 int main() {
     LONG args[7] = {0}; // Update array size to match all arguments in TEMPLATE
@@ -76,6 +77,19 @@ int main() {
 
     parse_arguments(args, &opts);
     FreeArgs(rdargs);
+
+    if (opts.format) {
+        strip_leading_plus(opts.format);
+    }
+
+    /*
+     * Linux date compatibility:
+     * adate date="+%Y-%m-%d" should behave like `date +%Y-%m-%d`.
+     */
+    if (opts.datestr && opts.datestr[0] == '+' && !opts.format) {
+        opts.format = opts.datestr;
+        opts.datestr = NULL;
+    }
     
        /*Help Option Seclected*/
 
@@ -84,6 +98,7 @@ int main() {
            "\nOPTIONS:\n"
            "  UTC        - Display time in UTC.\n"
            "  FORMAT     - Custom output format (e.g., %%Y-%%m-%%d %%H:%%M:%%S).\n"
+           "               Linux-style +FORMAT is accepted.\n"
            "  DATE       - Parse and display a specific date/time.\n"
            "               Supported formats:\n"
            "                 - ISO 8601: YYYY-MM-DDTHH:MM:SS\n"
@@ -103,12 +118,20 @@ int main() {
            "  %%S  - Second (00-59)\n"
            "  %%a  - Abbreviated weekday name (e.g., Sun)\n"
            "  %%A  - Full weekday name (e.g., Sunday)\n"
+           "  %%D  - Date as %%m/%%d/%%y\n"
+           "  %%F  - Date as %%Y-%%m-%%d\n"
            "  %%n  - Newline\n"
+           "  %%R  - Time as %%H:%%M\n"
+           "  %%r  - 12-hour time with AM/PM\n"
+           "  %%s  - Seconds since Unix epoch\n"
+           "  %%T  - Time as %%H:%%M:%%S\n"
            "  %%t  - Tab\n"
            "\nEXAMPLES:\n"
            "  adate date=\"2024-12-10T14:23:45\"\n"
            "  adate date=\"Tue, 10 Dec 2024 14:23:45 +0100\"\n"
-           "  adate epoch=\"@0\"\n");
+           "  adate epoch=\"@0\"\n"
+           "  adate format=\"+%F %T\"\n"
+           "  adate date=\"+%s\"\n");
     return RETURN_OK;
 }
 
@@ -210,6 +233,17 @@ BOOL parse_arguments(LONG *args, struct Options *opts) {
     opts->epoch = args[OPT_EPOCH] ? strdup((char *)args[OPT_EPOCH]) : NULL;
     opts->help = args[OPT_HELP] != 0;  // Parse the HELP option
     return TRUE;
+}
+
+void strip_leading_plus(char *format) {
+    if (!format || format[0] != '+') {
+        return;
+    }
+
+    size_t len = strlen(format);
+    if (len > 0) {
+        memmove(format, format + 1, len);
+    }
 }
 
 void free_arguments(struct Options *opts) {
@@ -733,11 +767,18 @@ void show_date(const struct TimeVal *tv, const char *format) {
                 case 'E': out += sprintf(out, "1978-01-01"); break;
                 // New options
                 case 'C': out += sprintf(out, "%02d", year / 100); break; // Century
+                case 'D': out += sprintf(out, "%02d/%02d/%02d", month, day, year % 100); break; // %m/%d/%y
+                case 'F': out += sprintf(out, "%04d-%02d-%02d", year, month, day); break; // %Y-%m-%d
                 case 'j': out += sprintf(out, "%03d", calculate_day_of_year(year, month, day)); break; // Day of the year
                 case 'U': out += sprintf(out, "%02d", calculate_week_number(year, month, day, 0)); break; // Week (Sunday start)
                 case 'W': out += sprintf(out, "%02d", calculate_week_number(year, month, day, 1)); break; // Week (Monday start)
                 case 'p': out += sprintf(out, "%s", hours >= 12 ? "PM" : "AM"); break; // AM/PM
                 case 'P': out += sprintf(out, "%s", hours >= 12 ? "pm" : "am"); break; // am/pm
+                case 'R': out += sprintf(out, "%02d:%02d", hours, minutes); break; // %H:%M
+                case 'r': out += sprintf(out, "%02d:%02d:%02d %s",
+                                         ((hours + 11) % 12) + 1, minutes, seconds, hours >= 12 ? "PM" : "AM"); break;
+                case 's': out += sprintf(out, "%llu", (unsigned long long)tv->tv_secs + 252460800ULL); break; // Unix epoch
+                case 'T': out += sprintf(out, "%02d:%02d:%02d", hours, minutes, seconds); break; // %H:%M:%S
                 case 'z': out += sprintf(out, "+0000"); break; // Dummy timezone offset (can be customized)
                 case 'Z': out += sprintf(out, "UTC"); break; // Dummy timezone name (can be customized)
                 case 'c': out += sprintf(out, "%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hours, minutes, seconds); break; // Locale's date and time
