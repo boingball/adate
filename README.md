@@ -75,12 +75,20 @@ Use the `FORMAT` option to customize the output. Supported specifiers include:
 | `%U`      | Week number (Sunday start)      |
 | `%W`      | Week number (Monday start)      |
 | `%p`      | AM/PM                           |
+| `%P`      | am/pm                           |
 | `%R`      | Time as `%H:%M`                 |
 | `%r`      | 12-hour time with AM/PM         |
 | `%s`      | Seconds since Unix epoch        |
 | `%T`      | Time as `%H:%M:%S`              |
-| `%z`      | Timezone offset                 |
-| `%Z`      | Timezone name                   |
+| `%I`      | Hour (01–12)                    |
+| `%B`      | Full month name                 |
+| `%C`      | Century                         |
+| `%c`      | Locale-style date and time      |
+| `%x`      | Locale-style date               |
+| `%X`      | Locale-style time               |
+| `%z`      | Timezone offset (`+0000`)       |
+| `%Z`      | Timezone name (`UTC`)           |
+| `%%`      | Literal percent sign            |
 
 ---
 
@@ -144,3 +152,15 @@ Contributions are welcome! Feel free to submit issues, feature requests, or pull
 ## License
 
 This project is licensed under the MIT License.
+
+---
+
+## Linux `date` Compatibility Gaps
+
+ADate supports many common formatting tokens, but it is not yet a full replacement for GNU/Linux `date`.
+
+- No equivalent to GNU `date -d` free-form natural-language parsing beyond fixed strings (`today`, `tomorrow`, `yesterday`).
+- No timezone database handling (`TZ`, named zones, DST rules); `%z` and `%Z` are currently fixed to `+0000` / `UTC`.
+- No nanosecond specifier (`%N`) or RFC-3339 convenience flags.
+- No long-option GNU CLI flags (`--date`, `--set`, `--utc`, `--iso-8601`, etc.); AmigaDOS keyword options are used instead.
+- No locale-driven translations for month/day names (output names are fixed in English).
