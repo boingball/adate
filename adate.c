@@ -95,7 +95,7 @@ int main() {
        /*Help Option Seclected*/
 
     if (opts.help) {
-    printf("ADate v1.0 10/12/24 - Usage: adate [OPTIONS]\n"
+    printf("ADate v1.1 23/05/26 - Usage: adate [OPTIONS]\n"
            "\nOPTIONS:\n"
            "  UTC        - Display time in UTC.\n"
            "  FORMAT     - Custom output format (e.g., %%Y-%%m-%%d %%H:%%M:%%S).\n"
