@@ -32,6 +32,7 @@
 
 - **Advanced Format Options**
   - Customize date and time output with specifiers like `%Y`, `%m`, `%d`, `%H`, `%M`, `%S`, and more.
+  - Linux-style `+FORMAT` input is supported (e.g., `format="+%F %T"`).
 
 ---
 
@@ -68,10 +69,16 @@ Use the `FORMAT` option to customize the output. Supported specifiers include:
 | `%S`      | Second (00–59)                  |
 | `%a`      | Abbreviated weekday name        |
 | `%A`      | Full weekday name               |
+| `%D`      | Date as `%m/%d/%y`              |
+| `%F`      | Date as `%Y-%m-%d`              |
 | `%j`      | Day of the year (001–366)       |
 | `%U`      | Week number (Sunday start)      |
 | `%W`      | Week number (Monday start)      |
 | `%p`      | AM/PM                           |
+| `%R`      | Time as `%H:%M`                 |
+| `%r`      | 12-hour time with AM/PM         |
+| `%s`      | Seconds since Unix epoch        |
+| `%T`      | Time as `%H:%M:%S`              |
 | `%z`      | Timezone offset                 |
 | `%Z`      | Timezone name                   |
 
@@ -92,6 +99,8 @@ adate utc
 ### Custom Format
 ```bash
 adate format="%Y-%m-%d %H:%M:%S"
+adate format="+%F %T"
+adate date="+%s"
 ```
 
 ### Parse a Specific Date
