@@ -31,7 +31,7 @@ struct Options {
 
 BOOL parse_arguments(LONG *args, struct Options *opts);
 void free_arguments(struct Options *opts);
-BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int *hours, int *minutes, struct TimeVal *tv);
+BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int *hours, int *minutes, int *seconds, struct TimeVal *tv);
 int calculate_days_since_1978(int year, int month, int day);
 void calculate_year_month_day(int days, int *year, int *month, int *day);
 void set_system_time(struct TimeVal *tv);
@@ -40,7 +40,7 @@ BOOL adjust_date_time(struct TimeVal *tv, const struct Options *opts);
 int DaysInMonth(int year, int month);
 void DateStampToDate(const struct TimeVal *tv, int *year, int *month, int *day);
 void convert_unix_to_timeval(const char *epoch, struct TimeVal *tv);
-void show_date_unix(const struct TimeVal *tv, const char *format);
+
 void timeval_to_datestamp(const struct TimeVal *tv, struct DateStamp *ds);
 int calculate_day_of_year(int year, int month, int day);
 /* Calculate the day of the year (001–366) for a given date.*/
@@ -66,7 +66,7 @@ int main() {
     opts.help = FALSE;
 
     // Variables for parsed date and time
-    int year = 0, month = 0, day = 0, hours = 0, minutes = 0;
+    int year = 0, month = 0, day = 0, hours = 0, minutes = 0, seconds = 0;
 
     rdargs = ReadArgs(TEMPLATE, args, NULL);
     if (!rdargs) {
@@ -89,6 +89,7 @@ int main() {
     if (opts.datestr && opts.datestr[0] == '+' && !opts.format) {
         opts.format = opts.datestr;
         opts.datestr = NULL;
+        strip_leading_plus(opts.format);
     }
     
        /*Help Option Seclected*/
@@ -149,12 +150,16 @@ int main() {
     if (opts.set) {
         if (opts.datestr) {
             // Parse provided date string
-            if (!parse_date_string(opts.datestr, &year, &month, &day, &hours, &minutes, &tv)) {
+            if (!parse_date_string(opts.datestr, &year, &month, &day, &hours, &minutes, &seconds, &tv)) {
                 printf("Error: Failed to parse date string '%s'.\n", opts.datestr);
                 return RETURN_ERROR;
             }
-            tv.tv_secs = calculate_days_since_1978(year, month, day) * 86400 +
-                         hours * 3600 + minutes * 60;
+            if (opts.timestr && sscanf(opts.timestr, "%2d:%2d:%2d", &hours, &minutes, &seconds) < 2) {
+            printf("Error: Invalid time format '%s'.\n", opts.timestr);
+            return RETURN_ERROR;
+        }
+        tv.tv_secs = calculate_days_since_1978(year, month, day) * 86400 +
+                         hours * 3600 + minutes * 60 + seconds;
             tv.tv_micro = 0;
 
         } else {
@@ -180,12 +185,16 @@ int main() {
 
     // Show date without setting it
     if (opts.datestr) {
-        if (!parse_date_string(opts.datestr, &year, &month, &day, &hours, &minutes, &tv)) {
+        if (!parse_date_string(opts.datestr, &year, &month, &day, &hours, &minutes, &seconds, &tv)) {
             printf("Error: Failed to parse date string '%s'.\n", opts.datestr);
             return RETURN_ERROR;
         }
+        if (opts.timestr && sscanf(opts.timestr, "%2d:%2d:%2d", &hours, &minutes, &seconds) < 2) {
+            printf("Error: Invalid time format '%s'.\n", opts.timestr);
+            return RETURN_ERROR;
+        }
         tv.tv_secs = calculate_days_since_1978(year, month, day) * 86400 +
-                     hours * 3600 + minutes * 60;
+                     hours * 3600 + minutes * 60 + seconds;
         tv.tv_micro = 0;
 
         show_date(&tv, opts.format ? opts.format : "%Y-%m-%d %H:%M:%S");
@@ -277,14 +286,15 @@ BOOL adjust_date_time(struct TimeVal *tv, const struct Options *opts) {
 
     if (opts->datestr) {
         int year, month, day, hours = (tv->tv_secs % 86400) / 3600, minutes = (tv->tv_secs % 3600) / 60;
-        if (!parse_date_string(opts->datestr, &year, &month, &day, &hours, &minutes, tv)) {
+        int seconds = tv->tv_secs % 60;
+        if (!parse_date_string(opts->datestr, &year, &month, &day, &hours, &minutes, &seconds, tv)) {
             CloseDevice((struct IORequest *)timerReq);
             DeleteIORequest((struct IORequest *)timerReq);
             DeleteMsgPort(timerPort);
             return FALSE;
         }
         int days = calculate_days_since_1978(year, month, day);
-        tv->tv_secs = days * 86400 + hours * 3600 + minutes * 60;
+        tv->tv_secs = days * 86400 + hours * 3600 + minutes * 60 + seconds;
     }
 
     CloseDevice((struct IORequest *)timerReq);
@@ -294,31 +304,22 @@ BOOL adjust_date_time(struct TimeVal *tv, const struct Options *opts) {
 }
 
 void convert_unix_to_timeval(const char *epoch, struct TimeVal *tv) {
-    if (!epoch) return;
+    if (!epoch || !tv) return;
 
+    long long raw_seconds;
     if (epoch[0] == '@') {
-        // Handle Amiga epoch explicitly
-        if (tv) {
-        long long amiga_seconds = atoll(epoch + 1); // Convert value after '@' to seconds
-        tv->tv_secs = (ULONG)amiga_seconds; // Set the time value directly
-        tv->tv_micro = 0;
-        return;
+        /* @<value> is Amiga epoch seconds (1978-01-01). */
+        raw_seconds = atoll(epoch + 1);
+    } else {
+        /* plain numeric value is Unix epoch seconds (1970-01-01). */
+        raw_seconds = atoll(epoch) - 252460800LL;
     }
 
+    if (raw_seconds < 0) raw_seconds = 0;
+    if (raw_seconds > 4294967295LL) raw_seconds = 4294967295LL;
 
-    // Handle Unix epoch
-    long long unix_seconds = atoll(epoch);
-    long long amiga_seconds = unix_seconds - 252460800; // Adjust for 8 years
-
-    // Clamp to Amiga range if needed
-    if (amiga_seconds < 0) amiga_seconds = 0;
-    if (amiga_seconds > 4294967295LL) amiga_seconds = 4294967295LL;
-
-    if (tv) {
-        tv->tv_secs = (ULONG)amiga_seconds;
-        tv->tv_micro = 0;
-    }
-    }
+    tv->tv_secs = (ULONG)raw_seconds;
+    tv->tv_micro = 0;
 }
 
 void timeval_to_datestamp(const struct TimeVal *tv, struct DateStamp *ds) {
@@ -385,8 +386,8 @@ int calculate_week_number(int year, int month, int day, int week_start) {
 
 
 
-BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int *hours, int *minutes, struct TimeVal *tv) {
-    int seconds = 0;                  // Declare 'seconds' for time parsing
+BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int *hours, int *minutes, int *seconds, struct TimeVal *tv) {
+    *seconds = 0;
     char month_name[4] = {0};         // Declare 'month_name' for RFC 2822 parsing
     *hours = *minutes = 0;            // Default time values
 
@@ -426,7 +427,7 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
         calculate_year_month_day(tv->tv_secs / 86400, year, month, day); // Days since 1978-01-01
         *hours = (tv->tv_secs % 86400) / 3600; // Extract hours
         *minutes = (tv->tv_secs % 3600) / 60;  // Extract minutes
-        int seconds = tv->tv_secs % 60;        // Extract seconds
+        *seconds = tv->tv_secs % 60;
         return TRUE;
     }
 
@@ -505,12 +506,12 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
     }
 
   // RFC 2822
-    if (strchr(datestr, ',') && sscanf(datestr, "%*[^,], %2d %3s %4d %2d:%2d:%2d %*s", day, month_name, year, hours, minutes, &seconds) == 6) {
+    if (strchr(datestr, ',') && sscanf(datestr, "%*[^,], %2d %3s %4d %2d:%2d:%2d %*s", day, month_name, year, hours, minutes, seconds) == 6) {
         *month = month_name_to_number(month_name);
         if (*month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month) &&
             *hours >= 0 && *hours <= 23 && *minutes >= 0 && *minutes <= 59) {
             tv->tv_secs = calculate_days_since_1978(*year, *month, *day) * 86400 +
-                          (*hours) * 3600 + (*minutes) * 60 + seconds;
+                          (*hours) * 3600 + (*minutes) * 60 + *seconds;
             tv->tv_micro = 0;
             return TRUE;
         }
@@ -519,22 +520,22 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
 
     // ISO 8601
     if (strchr(datestr, 'T')) {
-        int scanned = sscanf(datestr, "%4d-%2d-%2dT%2d:%2d:%2d", year, month, day, hours, minutes, &seconds);
+        int scanned = sscanf(datestr, "%4d-%2d-%2dT%2d:%2d:%2d", year, month, day, hours, minutes, seconds);
         if (scanned >= 3 && *month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month) &&
             *hours >= 0 && *hours <= 23 && *minutes >= 0 && *minutes <= 59) {
             tv->tv_secs = calculate_days_since_1978(*year, *month, *day) * 86400 +
-                          (*hours) * 3600 + (*minutes) * 60 + seconds;
+                          (*hours) * 3600 + (*minutes) * 60 + *seconds;
             tv->tv_micro = 0;
             return TRUE;
         }
         printf("Error: Invalid ISO 8601 date: %s\n", datestr);
     }
     // Custom Email-Friendly Format
-    if (sscanf(datestr, "%4d-%2d-%2d %2d:%2d:%2d", year, month, day, hours, minutes, &seconds) == 6 &&
+    if (sscanf(datestr, "%4d-%2d-%2d %2d:%2d:%2d", year, month, day, hours, minutes, seconds) == 6 &&
         *month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month) &&
         *hours >= 0 && *hours <= 23 && *minutes >= 0 && *minutes <= 59) {
         tv->tv_secs = calculate_days_since_1978(*year, *month, *day) * 86400 +
-                      (*hours) * 3600 + (*minutes) * 60 + seconds;
+                      (*hours) * 3600 + (*minutes) * 60 + *seconds;
         tv->tv_micro = 0;
         return TRUE;
     }
@@ -568,7 +569,7 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
     // Extract time of day (hours, minutes, seconds) from tv_secs
     *hours = (tv->tv_secs % 86400) / 3600;
     *minutes = (tv->tv_secs % 3600) / 60;
-    int seconds = tv->tv_secs % 60;
+    *seconds = tv->tv_secs % 60;
     return TRUE;
 }
 
@@ -759,10 +760,16 @@ void show_date(const struct TimeVal *tv, const char *format) {
                 case 'm': out += sprintf(out, "%02d", month); break;
                 case 'd': out += sprintf(out, "%02d", day); break;
                 case 'H': out += sprintf(out, "%02d", hours); break;
+                case 'I': out += sprintf(out, "%02d", ((hours + 11) % 12) + 1); break;
                 case 'M': out += sprintf(out, "%02d", minutes); break;
                 case 'S': out += sprintf(out, "%02d", seconds); break;
                 case 'a': out += sprintf(out, "%s", day_abbr[dow]); break;
                 case 'A': out += sprintf(out, "%s", day_names[dow]); break;
+                case 'B': {
+                    static const char *month_names[] = {"January","February","March","April","May","June","July","August","September","October","November","December"};
+                    out += sprintf(out, "%s", month_names[month - 1]);
+                    break;
+                }
                 case 'n': out += sprintf(out, "\n"); break;
                 case 'E': out += sprintf(out, "1978-01-01"); break;
                 // New options
