@@ -138,7 +138,9 @@ int main() {
 
     if (opts.epoch) {
 
-    convert_unix_to_timeval(opts.epoch, &tv);
+    if (!convert_unix_to_timeval(opts.epoch, &tv)) {
+        return RETURN_ERROR;
+    }
     // Convert to DateStamp (optional for debugging)
     struct DateStamp ds;
     timeval_to_datestamp(&tv, &ds);
@@ -204,7 +206,9 @@ int main() {
     // Handle epoch conversion
     if (opts.epoch) {
 
-    convert_unix_to_timeval(opts.epoch, &tv);  // Convert Unix epoch to AmigaOS timeval
+    if (!convert_unix_to_timeval(opts.epoch, &tv)) {  // Convert Unix epoch to AmigaOS timeval
+        return RETURN_ERROR;
+    }
 
     // Optional: Convert to DateStamp for AmigaDOS compatibility
     struct DateStamp ds;
@@ -373,15 +377,17 @@ int calculate_day_of_year(int year, int month, int day) {
 }
 
 int calculate_week_number(int year, int month, int day, int week_start) {
-    int day_of_year = calculate_day_of_year(year, month, day);
+    int day_of_year = calculate_day_of_year(year, month, day) - 1; /* 0-based */
+    int jan1_weekday = calculate_day_of_week(year, 1, 1); /* 0=Sun..6=Sat */
 
-    // Calculate the day of the week for January 1st
-    int jan1_weekday = (calculate_day_of_week(year, 1, 1) - week_start + 7) % 7;
+    if (week_start == 0) {
+        /* %U: week starts Sunday; days before first Sunday are week 00. */
+        return (day_of_year + 7 - jan1_weekday) / 7;
+    }
 
-    // Adjust the day of year to the nearest week start
-    int adjusted_day = day_of_year + jan1_weekday;
-
-    return adjusted_day / 7;
+    /* %W: week starts Monday; days before first Monday are week 00. */
+    int jan1_monday_index = (jan1_weekday == 0) ? 6 : (jan1_weekday - 1);
+    return (day_of_year + 7 - jan1_monday_index) / 7;
 }
 
 
@@ -455,7 +461,20 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
         return FALSE;
     }
 
-  // Check for YYYY-MM-DD
+    // ISO 8601
+    if (strchr(datestr, 'T')) {
+        int scanned = sscanf(datestr, "%4d-%2d-%2dT%2d:%2d:%2d", year, month, day, hours, minutes, seconds);
+        if (scanned >= 3 && *month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month) &&
+            *hours >= 0 && *hours <= 23 && *minutes >= 0 && *minutes <= 59) {
+            tv->tv_secs = calculate_days_since_1978(*year, *month, *day) * 86400 +
+                          (*hours) * 3600 + (*minutes) * 60 + *seconds;
+            tv->tv_micro = 0;
+            return TRUE;
+        }
+        printf("Error: Invalid ISO 8601 date: %s\n", datestr);
+    }
+
+    // Check for YYYY-MM-DD
     if (strlen(datestr) >= 10 && datestr[4] == '-') {
         if (sscanf(datestr, "%4d-%2d-%2d", year, month, day) == 3) {
             if (*month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month)) {
