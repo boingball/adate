@@ -1,4 +1,4 @@
-//Amiga ADate Program - DBanfi 2024
+//Amiga ADate Program - DBanfi 2026
 #include <exec/types.h>
 #include <exec/io.h>
 #include <exec/ports.h>
