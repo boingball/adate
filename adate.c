@@ -39,7 +39,7 @@ void show_date(const struct TimeVal *tv, const char *format);
 BOOL adjust_date_time(struct TimeVal *tv, const struct Options *opts);
 int DaysInMonth(int year, int month);
 void DateStampToDate(const struct TimeVal *tv, int *year, int *month, int *day);
-void convert_unix_to_timeval(const char *epoch, struct TimeVal *tv);
+BOOL convert_unix_to_timeval(const char *epoch, struct TimeVal *tv);
 
 void timeval_to_datestamp(const struct TimeVal *tv, struct DateStamp *ds);
 int calculate_day_of_year(int year, int month, int day);
@@ -307,8 +307,8 @@ BOOL adjust_date_time(struct TimeVal *tv, const struct Options *opts) {
     return TRUE;
 }
 
-void convert_unix_to_timeval(const char *epoch, struct TimeVal *tv) {
-    if (!epoch || !tv) return;
+BOOL convert_unix_to_timeval(const char *epoch, struct TimeVal *tv) {
+    if (!epoch || !tv) return FALSE;
 
     long long raw_seconds;
     if (epoch[0] == '@') {
@@ -324,6 +324,7 @@ void convert_unix_to_timeval(const char *epoch, struct TimeVal *tv) {
 
     tv->tv_secs = (ULONG)raw_seconds;
     tv->tv_micro = 0;
+    return TRUE;
 }
 
 void timeval_to_datestamp(const struct TimeVal *tv, struct DateStamp *ds) {
