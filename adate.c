@@ -138,7 +138,9 @@ int main() {
 
     if (opts.epoch) {
 
-    convert_unix_to_timeval(opts.epoch, &tv);
+    if (!convert_unix_to_timeval(opts.epoch, &tv)) {
+        return RETURN_ERROR;
+    }
     // Convert to DateStamp (optional for debugging)
     struct DateStamp ds;
     timeval_to_datestamp(&tv, &ds);
@@ -204,7 +206,9 @@ int main() {
     // Handle epoch conversion
     if (opts.epoch) {
 
-    convert_unix_to_timeval(opts.epoch, &tv);  // Convert Unix epoch to AmigaOS timeval
+    if (!convert_unix_to_timeval(opts.epoch, &tv)) {  // Convert Unix epoch to AmigaOS timeval
+        return RETURN_ERROR;
+    }
 
     // Optional: Convert to DateStamp for AmigaDOS compatibility
     struct DateStamp ds;
@@ -312,12 +316,6 @@ void convert_unix_to_timeval(const char *epoch, struct TimeVal *tv) {
         raw_seconds = atoll(epoch + 1);
     } else {
         /* plain numeric value is Unix epoch seconds (1970-01-01). */
-        if (atoll(epoch) < 252460800LL) {
-            printf("Error: Unix epoch before 1978-01-01 is not supported on this AmigaOS time base.\n");
-            tv->tv_secs = 0;
-            tv->tv_micro = 0;
-            return;
-        }
         raw_seconds = atoll(epoch) - 252460800LL;
     }
 
@@ -539,6 +537,18 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
         printf("Error: Invalid RFC 2822 date: %s\n", datestr);
     }
 
+    // ISO 8601
+    if (strchr(datestr, 'T')) {
+        int scanned = sscanf(datestr, "%4d-%2d-%2dT%2d:%2d:%2d", year, month, day, hours, minutes, seconds);
+        if (scanned >= 3 && *month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month) &&
+            *hours >= 0 && *hours <= 23 && *minutes >= 0 && *minutes <= 59) {
+            tv->tv_secs = calculate_days_since_1978(*year, *month, *day) * 86400 +
+                          (*hours) * 3600 + (*minutes) * 60 + *seconds;
+            tv->tv_micro = 0;
+            return TRUE;
+        }
+        printf("Error: Invalid ISO 8601 date: %s\n", datestr);
+    }
     // Custom Email-Friendly Format
     if (sscanf(datestr, "%4d-%2d-%2d %2d:%2d:%2d", year, month, day, hours, minutes, seconds) == 6 &&
         *month >= 1 && *month <= 12 && *day >= 1 && *day <= DaysInMonth(*year, *month) &&
