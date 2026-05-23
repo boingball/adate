@@ -390,12 +390,15 @@ int calculate_week_number(int year, int month, int day, int week_start) {
 
     if (week_start == 0) {
         /* %U: week starts Sunday; days before first Sunday are week 00. */
-        return (day_of_year + 7 - jan1_weekday) / 7;
+        int first_sunday_offset = (7 - jan1_weekday) % 7;
+        if (day_of_year < first_sunday_offset) return 0;
+        return 1 + ((day_of_year - first_sunday_offset) / 7);
     }
 
     /* %W: week starts Monday; days before first Monday are week 00. */
-    int jan1_monday_index = (jan1_weekday == 0) ? 6 : (jan1_weekday - 1);
-    return (day_of_year + 7 - jan1_monday_index) / 7;
+    int first_monday_offset = (8 - jan1_weekday) % 7;
+    if (day_of_year < first_monday_offset) return 0;
+    return 1 + ((day_of_year - first_monday_offset) / 7);
 }
 
 
@@ -482,7 +485,6 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
             tv->tv_micro = 0;
             return TRUE;
         }
-        printf("Error: Invalid ISO 8601 date: %s\n", datestr);
     }
 
     // Check for YYYY-MM-DD
