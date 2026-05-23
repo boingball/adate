@@ -319,7 +319,14 @@ BOOL convert_unix_to_timeval(const char *epoch, struct TimeVal *tv) {
         raw_seconds = atoll(epoch) - 252460800LL;
     }
 
-    if (raw_seconds < 0) raw_seconds = 0;
+    if (raw_seconds < 0) {
+        if (epoch[0] == '@') {
+            printf("Error: Amiga epoch seconds cannot be negative: %s\n", epoch);
+        } else {
+            printf("Error: Unix epoch %s is before the Amiga epoch (1978-01-01 00:00:00 UTC).\n", epoch);
+        }
+        return FALSE;
+    }
     if (raw_seconds > 4294967295LL) raw_seconds = 4294967295LL;
 
     tv->tv_secs = (ULONG)raw_seconds;
@@ -420,10 +427,13 @@ BOOL parse_date_string(const char *datestr, int *year, int *month, int *day, int
         long long unix_seconds = atoll(datestr + 1); // Parse the value after '@'
         long long amiga_seconds = unix_seconds - 252460800; // Adjust for Unix to Amiga epoch
 
-        // Clamp to valid Amiga range
+        // Reject pre-Amiga-epoch timestamps instead of silently clamping to 1978.
         if (amiga_seconds < 0) {
-            amiga_seconds = 0; // Set to the start of Amiga epoch
-        } else if (amiga_seconds > 4294967295LL) {
+            printf("Error: Unix epoch %lld is before the Amiga epoch (1978-01-01 00:00:00 UTC).\n", unix_seconds);
+            return FALSE;
+        }
+
+        if (amiga_seconds > 4294967295LL) {
             amiga_seconds = 4294967295LL; // Clamp to max 32-bit value
         }
 
